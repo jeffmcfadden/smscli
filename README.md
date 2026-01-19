@@ -6,13 +6,16 @@ Send iMessages from the command line on macOS via AppleScript.
 
 **Quick install:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jeffmcfadden/smscli/main/sms | sudo tee /usr/local/bin/sms > /dev/null && sudo chmod +x /usr/local/bin/sms
+git clone https://github.com/jeffmcfadden/smscli.git ~/.smscli
+echo 'export PATH="$HOME/.smscli:$PATH"' >> ~/.zshrc
+source ~/.zshrc
 ```
 
 **Manual install:**
 ```bash
-sudo cp sms /usr/local/bin/sms
-sudo chmod +x /usr/local/bin/sms
+git clone https://github.com/jeffmcfadden/smscli.git
+cd smscli
+sudo cp sms contact_lookup.sh list_chats.sh list_messages.sh search_contacts.sh send_message.sh /usr/local/bin/
 ```
 
 ## Usage
@@ -38,13 +41,11 @@ sms -s "Smith"
 sms --chats
 sms -c "Family"    # filter by name
 
-# List recent messages from a conversation (experimental)
-sms --list "Family"          # last 5 messages
-sms --list "John Smith" 10   # last 10 messages
-sms -l "+15551234567" 3      # last 3 messages
+# List recent messages from a conversation
+sms --list "Family"          # last 10 messages
+sms --list "John Smith" 20   # last 20 messages
+sms -l "+15551234567" 5      # last 5 messages
 ```
-
-**Note:** `--list` is experimental and may have formatting issues with some messages (e.g., emoji, reactions).
 
 ## Audit Log
 
