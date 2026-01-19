@@ -1,0 +1,223 @@
+#!/bin/bash
+
+# Usage: sms <recipient> <message>
+#        sms --search <query>
+#        sms --chats [query]
+# recipient can be:
+#   - phone number (e.g., +15551234567)
+#   - email address (e.g., user@example.com)
+#   - contact name (e.g., "John Smith")
+#   - group chat name (e.g., "Forge")
+
+# Handle --chats option (list group chats)
+if [ "$1" = "--chats" ] || [ "$1" = "-c" ]; then
+    QUERY="$2"
+    osascript <<EOF
+tell application "Messages"
+    set namedChats to {}
+    set allChats to every chat
+    repeat with aChat in allChats
+        set chatName to name of aChat
+        if chatName is not missing value then
+            if "$QUERY" is "" or chatName contains "$QUERY" then
+                set end of namedChats to chatName
+            end if
+        end if
+    end repeat
+    if (count of namedChats) is 0 then
+        return "No named group chats found"
+    end if
+    set AppleScript's text item delimiters to "
+"
+    return namedChats as text
+end tell
+EOF
+    exit 0
+fi
+
+# Handle --search option
+if [ "$1" = "--search" ] || [ "$1" = "-s" ]; then
+    QUERY="$2"
+    if [ -z "$QUERY" ]; then
+        echo "Usage: $0 --search <query>"
+        echo "  query: partial name to search (e.g., \"Ben\" or \"Smith\")"
+        exit 1
+    fi
+
+    osascript <<EOF
+-- Helper to clean up label names
+on cleanLabel(rawLabel)
+    set cleanedLabel to rawLabel
+    -- Remove Apple's internal label format markers
+    if rawLabel contains "_\$!<" then
+        set cleanedLabel to text 5 thru -5 of rawLabel
+    end if
+    return cleanedLabel
+end cleanLabel
+
+tell application "Contacts"
+    set matchingPeople to (every person whose name contains "$QUERY")
+    set output to ""
+    repeat with thePerson in matchingPeople
+        set personName to name of thePerson
+        set personInfo to personName
+
+        -- Get phone numbers
+        set thePhones to phones of thePerson
+        repeat with thePhone in thePhones
+            set phoneLabel to my cleanLabel(label of thePhone)
+            set phoneValue to value of thePhone
+            set personInfo to personInfo & "
+    " & phoneLabel & ": " & phoneValue
+        end repeat
+
+        -- Get emails
+        set theEmails to emails of thePerson
+        repeat with theEmail in theEmails
+            set emailLabel to my cleanLabel(label of theEmail)
+            set emailValue to value of theEmail
+            set personInfo to personInfo & "
+    " & emailLabel & ": " & emailValue
+        end repeat
+
+        set output to output & personInfo & "
+"
+    end repeat
+    if output is "" then
+        return "No contacts found matching \"$QUERY\""
+    end if
+    return output
+end tell
+EOF
+    exit 0
+fi
+
+RECIPIENT="$1"
+MESSAGE="$2"
+
+if [ -z "$RECIPIENT" ] || [ -z "$MESSAGE" ]; then
+    echo "Usage: $0 <recipient> <message>"
+    echo "       $0 --search <query>"
+    echo "       $0 --chats [query]"
+    echo ""
+    echo "  recipient: phone number, email, contact name, or group chat name"
+    echo "  message: the message to send"
+    echo "  --search, -s: search contacts by partial name"
+    echo "  --chats, -c: list named group chats (optional query to filter)"
+    exit 1
+fi
+
+# Function to check if recipient looks like a phone number or email
+is_phone_or_email() {
+    local input="$1"
+    # Check if it contains @ (email)
+    if [[ "$input" == *"@"* ]]; then
+        return 0
+    fi
+    # Check if it starts with + (international phone)
+    if [[ "$input" == "+"* ]]; then
+        return 0
+    fi
+    # Check if it's mostly digits (phone number) - at least 7 digits
+    local digits_only=$(echo "$input" | tr -cd '0-9')
+    if [[ ${#digits_only} -ge 7 ]]; then
+        return 0
+    fi
+    return 1
+}
+
+# Escape quotes in message for AppleScript
+ESCAPED_MESSAGE=$(echo "$MESSAGE" | sed 's/"/\\"/g')
+
+# Track if we're sending to a group chat
+IS_GROUP_CHAT="false"
+
+# If recipient doesn't look like a phone/email, check for group chat first, then contact
+if ! is_phone_or_email "$RECIPIENT"; then
+    # First, try to find a matching group chat
+    GROUP_CHAT=$(osascript <<EOF
+tell application "Messages"
+    try
+        set targetChat to (first chat whose name is "$RECIPIENT")
+        return name of targetChat
+    on error
+        return ""
+    end try
+end tell
+EOF
+)
+
+    if [ -n "$GROUP_CHAT" ]; then
+        echo "Found group chat: $GROUP_CHAT"
+        IS_GROUP_CHAT="true"
+    else
+        # Try to find in Contacts
+        echo "Looking up contact: $RECIPIENT"
+        CONTACT_INFO=$(osascript <<EOF
+tell application "Contacts"
+    set matchingPeople to (every person whose name contains "$RECIPIENT")
+    if (count of matchingPeople) > 0 then
+        set thePerson to item 1 of matchingPeople
+
+        -- Try to get iMessage-capable identifier (phone or email)
+        set thePhones to phones of thePerson
+        if (count of thePhones) > 0 then
+            set thePhone to value of item 1 of thePhones
+            return thePhone
+        end if
+
+        -- Fall back to email
+        set theEmails to emails of thePerson
+        if (count of theEmails) > 0 then
+            set theEmail to value of item 1 of theEmails
+            return theEmail
+        end if
+    end if
+    return ""
+end tell
+EOF
+)
+
+        if [ -z "$CONTACT_INFO" ]; then
+            echo "Error: Could not find contact or group chat '$RECIPIENT'"
+            exit 1
+        fi
+
+        echo "Found contact info: $CONTACT_INFO"
+        RECIPIENT="$CONTACT_INFO"
+    fi
+fi
+
+# Send the message
+if [ "$IS_GROUP_CHAT" = "true" ]; then
+    # Send to group chat
+    osascript <<EOF
+tell application "Messages"
+    set targetChat to (first chat whose name is "$RECIPIENT")
+    send "$ESCAPED_MESSAGE" to targetChat
+end tell
+EOF
+else
+    # Send to individual via iMessage
+    osascript <<EOF
+tell application "Messages"
+    set targetService to 1st account whose service type = iMessage
+    set targetBuddy to participant "$RECIPIENT" of targetService
+    send "$ESCAPED_MESSAGE" to targetBuddy
+end tell
+EOF
+fi
+
+if [ $? -eq 0 ]; then
+    echo "Message sent successfully to $RECIPIENT"
+    # Log to system log for audit trail
+    if [ "$IS_GROUP_CHAT" = "true" ]; then
+        logger -t "send_message" "Sent message to group chat '$RECIPIENT' (${#MESSAGE} chars)"
+    else
+        logger -t "send_message" "Sent message to '$RECIPIENT' (${#MESSAGE} chars)"
+    fi
+else
+    echo "Failed to send message"
+    logger -t "send_message" "FAILED to send message to '$RECIPIENT'"
+    exit 1
+fi
