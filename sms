@@ -3,11 +3,94 @@
 # Usage: sms <recipient> <message>
 #        sms --search <query>
 #        sms --chats [query]
+#        sms --list <name> [count]
 # recipient can be:
 #   - phone number (e.g., +15551234567)
 #   - email address (e.g., user@example.com)
 #   - contact name (e.g., "John Smith")
-#   - group chat name (e.g., "Forge")
+#   - group chat name (e.g., "Family")
+
+MESSAGES_DB="$HOME/Library/Messages/chat.db"
+
+# Handle --list option (show recent messages)
+if [ "$1" = "--list" ] || [ "$1" = "-l" ]; then
+    CHAT_NAME="$2"
+    COUNT="${3:-5}"
+
+    if [ -z "$CHAT_NAME" ]; then
+        echo "Usage: $0 --list <name> [count]"
+        echo "  name: contact name, phone number, or group chat name"
+        echo "  count: number of messages to show (default: 5)"
+        exit 1
+    fi
+
+    if [ ! -r "$MESSAGES_DB" ]; then
+        echo "Error: Cannot read Messages database."
+        echo "Grant Full Disk Access to Terminal in System Settings > Privacy & Security."
+        exit 1
+    fi
+
+    echo "[experimental] Message listing may have formatting issues with some messages."
+    echo ""
+
+    # First, find the chat ID - prioritize exact display_name match, then chat_identifier
+    CHAT_ID=$(sqlite3 "$MESSAGES_DB" "
+        SELECT ROWID FROM chat
+        WHERE display_name = '${CHAT_NAME}'
+        LIMIT 1;
+    ")
+
+    # If no exact match, try partial match on display_name or chat_identifier
+    if [ -z "$CHAT_ID" ]; then
+        CHAT_ID=$(sqlite3 "$MESSAGES_DB" "
+            SELECT ROWID FROM chat
+            WHERE display_name LIKE '%${CHAT_NAME}%'
+               OR chat_identifier LIKE '%${CHAT_NAME}%'
+            LIMIT 1;
+        ")
+    fi
+
+    if [ -z "$CHAT_ID" ]; then
+        echo "No chat found matching '$CHAT_NAME'"
+        exit 1
+    fi
+
+    # Query messages from the specific chat, getting both text and attributedBody
+    sqlite3 "$MESSAGES_DB" "
+        SELECT datetime(m.date/1000000000 + 978307200, 'unixepoch', 'localtime') as date,
+               m.is_from_me,
+               COALESCE(h.id, '') as handle,
+               COALESCE(m.text, '') as text,
+               hex(m.attributedBody) as attr_hex
+        FROM message m
+        LEFT JOIN handle h ON m.handle_id = h.ROWID
+        JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+        WHERE cmj.chat_id = $CHAT_ID
+        ORDER BY m.date DESC
+        LIMIT $COUNT;
+    " | tac | while IFS='|' read -r date is_from_me handle text attr_hex; do
+        # Determine sender
+        if [ "$is_from_me" = "1" ]; then
+            sender="Me"
+        elif [ -n "$handle" ]; then
+            sender="$handle"
+        else
+            sender="Unknown"
+        fi
+
+        # If text is empty, try to extract from attributedBody
+        if [ -z "$text" ] && [ -n "$attr_hex" ]; then
+            # Decode hex and extract readable text, filtering out metadata
+            text=$(echo "$attr_hex" | xxd -r -p | strings -n 5 | grep -v '^NS' | grep -v '^__' | grep -v '^streamtyped' | head -1 | sed 's/^[+￼]*//' | sed 's/^[^a-zA-Z0-9"]*//')
+        fi
+
+        # Skip empty messages (reactions, read receipts, etc.)
+        if [ -n "$text" ]; then
+            echo "[$date] $sender: $text"
+        fi
+    done
+    exit 0
+fi
 
 # Handle --chats option (list group chats)
 if [ "$1" = "--chats" ] || [ "$1" = "-c" ]; then
@@ -99,11 +182,13 @@ if [ -z "$RECIPIENT" ] || [ -z "$MESSAGE" ]; then
     echo "Usage: $0 <recipient> <message>"
     echo "       $0 --search <query>"
     echo "       $0 --chats [query]"
+    echo "       $0 --list <name> [count]"
     echo ""
     echo "  recipient: phone number, email, contact name, or group chat name"
     echo "  message: the message to send"
     echo "  --search, -s: search contacts by partial name"
     echo "  --chats, -c: list named group chats (optional query to filter)"
+    echo "  --list, -l: show recent messages (default: 5, requires Full Disk Access)"
     exit 1
 fi
 
