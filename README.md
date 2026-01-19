@@ -4,6 +4,12 @@ Send iMessages from the command line on macOS via AppleScript.
 
 ## Installation
 
+**Quick install:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/jeffmcfadden/smscli/main/sms | sudo tee /usr/local/bin/sms > /dev/null && sudo chmod +x /usr/local/bin/sms
+```
+
+**Manual install:**
 ```bash
 sudo cp sms /usr/local/bin/sms
 sudo chmod +x /usr/local/bin/sms
