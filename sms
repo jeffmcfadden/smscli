@@ -6,7 +6,14 @@
 #        sms --chats [query]
 #        sms --list <name> [count]
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Resolve symlinks to get the actual script directory
+SOURCE="$0"
+while [ -L "$SOURCE" ]; do
+    SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$SCRIPT_DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
 
 # Show help
 show_help() {

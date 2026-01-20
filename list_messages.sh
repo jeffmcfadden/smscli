@@ -4,7 +4,14 @@
 # Usage: ./list_messages.sh <chat_name_or_contact> [count]
 # Supports: group chat names, phone numbers, emails, or contact names
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Resolve symlinks to get the actual script directory
+SOURCE="$0"
+while [ -L "$SOURCE" ]; do
+    SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$SCRIPT_DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
 CHAT_NAME="$1"
 COUNT="${2:-10}"
 
