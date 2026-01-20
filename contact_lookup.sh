@@ -28,6 +28,8 @@ fi
 # Look up in Contacts
 CONTACT_INFO=$(osascript <<EOF
 tell application "Contacts"
+    launch
+    delay 0.5
     set matchingPeople to (every person whose name contains "$NAME")
     if (count of matchingPeople) > 0 then
         set thePerson to item 1 of matchingPeople

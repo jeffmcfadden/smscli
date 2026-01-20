@@ -12,6 +12,9 @@ if [ -z "$QUERY" ]; then
 fi
 
 osascript <<EOF
+tell application "Contacts" to launch
+delay 0.5
+
 -- Helper to clean up label names
 on cleanLabel(rawLabel)
     set cleanedLabel to rawLabel
