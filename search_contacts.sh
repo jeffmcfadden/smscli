@@ -1,15 +1,35 @@
 #!/bin/bash
 
 # Search contacts by name
-# Usage: ./search_contacts.sh <query>
+# Usage: ./search_contacts.sh <query> [--limit N]
 # Returns matching contacts with their phone numbers and emails
 
-QUERY="$1"
+QUERY=""
+LIMIT=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --limit|-n)
+            LIMIT="$2"
+            shift 2
+            ;;
+        *)
+            if [ -z "$QUERY" ]; then
+                QUERY="$1"
+            fi
+            shift
+            ;;
+    esac
+done
 
 if [ -z "$QUERY" ]; then
-    echo "Usage: $0 <query>" >&2
+    echo "Usage: $0 <query> [--limit N]" >&2
     exit 1
 fi
+
+# Default limit to large number if not specified
+LIMIT="${LIMIT:-9999}"
 
 osascript <<EOF
 tell application "Contacts" to launch
@@ -28,7 +48,13 @@ end cleanLabel
 tell application "Contacts"
     set matchingPeople to (every person whose name contains "$QUERY")
     set output to ""
+    set contactCount to 0
+    set maxContacts to $LIMIT
+
     repeat with thePerson in matchingPeople
+        if contactCount ≥ maxContacts then exit repeat
+        set contactCount to contactCount + 1
+
         set personName to name of thePerson
         set personInfo to personName
 

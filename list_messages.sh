@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # List recent messages from a chat
-# Usage: ./list_messages.sh <chat_name_or_contact> [count]
+# Usage: ./list_messages.sh <chat_name_or_contact> [count] [--limit N]
 # Supports: group chat names, phone numbers, emails, or contact names
 
 # Resolve symlinks to get the actual script directory
@@ -12,11 +12,30 @@ while [ -L "$SOURCE" ]; do
     [[ $SOURCE != /* ]] && SOURCE="$SCRIPT_DIR/$SOURCE"
 done
 SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
-CHAT_NAME="$1"
-COUNT="${2:-10}"
+
+CHAT_NAME=""
+COUNT="10"
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --limit|-n)
+            COUNT="$2"
+            shift 2
+            ;;
+        *)
+            if [ -z "$CHAT_NAME" ]; then
+                CHAT_NAME="$1"
+            elif [[ "$1" =~ ^[0-9]+$ ]]; then
+                COUNT="$1"
+            fi
+            shift
+            ;;
+    esac
+done
 
 if [ -z "$CHAT_NAME" ]; then
-    echo "Usage: $0 <chat_name_or_contact> [count]" >&2
+    echo "Usage: $0 <chat_name_or_contact> [count] [--limit N]" >&2
     exit 1
 fi
 
@@ -133,7 +152,7 @@ if not chat_id:
     print(f"No chat found matching '{chat_name}'")
     exit(1)
 
-# Get messages
+# Get messages - query extra to account for filtered reactions
 cursor.execute("""
     SELECT
         m.ROWID,
@@ -149,7 +168,7 @@ cursor.execute("""
     WHERE cmj.chat_id = ?
     ORDER BY m.date DESC
     LIMIT ?
-""", (chat_id, count))
+""", (chat_id, count * 5))  # Query extra to account for filtered reactions
 
 messages = []
 for row in cursor.fetchall():
@@ -183,7 +202,8 @@ for row in cursor.fetchall():
 
 conn.close()
 
-# Print in chronological order (oldest first)
+# Limit to requested count and print in chronological order (oldest first)
+messages = messages[:count]
 for date_str, sender, content in reversed(messages):
     print(f"[{date_str}] {sender}: {content}")
 EOF

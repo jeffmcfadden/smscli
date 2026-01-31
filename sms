@@ -18,9 +18,9 @@ SCRIPT_DIR="$(cd "$(dirname "$SOURCE")" && pwd)"
 # Show help
 show_help() {
     echo "Usage: sms <recipient> <message>"
-    echo "       sms --search <query>"
-    echo "       sms --chats [query]"
-    echo "       sms --list <name> [count]"
+    echo "       sms --search <query> [--limit N]"
+    echo "       sms --chats [query] [--limit N]"
+    echo "       sms --list <name> [--limit N]"
     echo ""
     echo "  recipient: phone number, email, contact name, or group chat name"
     echo "  message: the message to send"
@@ -28,7 +28,8 @@ show_help() {
     echo "Options:"
     echo "  --search, -s   Search contacts by partial name"
     echo "  --chats, -c    List named group chats (optional query to filter)"
-    echo "  --list, -l     Show recent messages from a conversation (default: 5)"
+    echo "  --list, -l     Show recent messages from a conversation (default: 10)"
+    echo "  --limit, -n    Limit number of results returned"
     echo "  --help, -h     Show this help message"
 }
 
@@ -40,25 +41,28 @@ fi
 
 # Handle --chats option
 if [ "$1" = "--chats" ] || [ "$1" = "-c" ]; then
-    exec "$SCRIPT_DIR/list_chats.sh" "$2"
+    shift
+    exec "$SCRIPT_DIR/list_chats.sh" "$@"
 fi
 
 # Handle --search option
 if [ "$1" = "--search" ] || [ "$1" = "-s" ]; then
-    if [ -z "$2" ]; then
-        echo "Usage: sms --search <query>" >&2
+    shift
+    if [ -z "$1" ]; then
+        echo "Usage: sms --search <query> [--limit N]" >&2
         exit 1
     fi
-    exec "$SCRIPT_DIR/search_contacts.sh" "$2"
+    exec "$SCRIPT_DIR/search_contacts.sh" "$@"
 fi
 
 # Handle --list option
 if [ "$1" = "--list" ] || [ "$1" = "-l" ]; then
-    if [ -z "$2" ]; then
-        echo "Usage: sms --list <name> [count]" >&2
+    shift
+    if [ -z "$1" ]; then
+        echo "Usage: sms --list <name> [--limit N]" >&2
         exit 1
     fi
-    exec "$SCRIPT_DIR/list_messages.sh" "$2" "${3:-10}"
+    exec "$SCRIPT_DIR/list_messages.sh" "$@"
 fi
 
 # Default: send a message

@@ -1,12 +1,26 @@
 #!/bin/bash
 
 # List named group chats
-# Usage: ./list_chats.sh [query]
-# If query is provided, filters chats by name
+# Usage: ./list_chats.sh [query] [--limit N]
 
-QUERY="$1"
+QUERY=""
+LIMIT=""
 
-osascript <<EOF
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --limit|-n)
+            LIMIT="$2"
+            shift 2
+            ;;
+        *)
+            QUERY="$1"
+            shift
+            ;;
+    esac
+done
+
+osascript <<EOF | if [ -n "$LIMIT" ]; then head -n "$LIMIT"; else cat; fi
 tell application "Messages"
     set namedChats to {}
     set allChats to every chat
